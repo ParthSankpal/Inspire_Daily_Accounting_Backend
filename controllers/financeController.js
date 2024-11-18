@@ -4,9 +4,9 @@ import DailyBalanceChange from '../models/DailyBalanceChange.js';
 
 
 // Helper function to update opening balance
-const updatedailyOpeningBalance = async (transaction) => { 
+const updatedailyOpeningBalance = async (transaction) => {
   const { amount, type, mode, bankName } = transaction;
-  
+
   // Get today's date in 'YYYY-MM-DD' format
   const today = new Date().toISOString().split('T')[0];
 
@@ -53,8 +53,8 @@ export const addTransaction = async (req, res) => {
 
     const lastTransaction = await Transaction.findOne().sort({ date: -1 });
     const previousBalance = lastTransaction ? lastTransaction.balanceAfterTransaction : 0;
-    const balanceAfterTransaction = type === 'income' 
-      ? previousBalance + amount 
+    const balanceAfterTransaction = type === 'income'
+      ? previousBalance + amount
       : previousBalance - amount;
 
     const transaction = new Transaction({
@@ -77,9 +77,9 @@ export const addTransaction = async (req, res) => {
     await updatedailyOpeningBalance(transaction);
 
     res.status(201).json(transaction);
-    
+
   } catch (error) {
-    console.log(error);
+    // console.log(error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -97,33 +97,35 @@ export const setOpeningBalance = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}; 
+};
 
 
 // Get opening balance for a specific date
 export const getOpeningBalanceByDate = async (req, res) => {
   try {
-      const { date } = req.params;
-      // console.log(date);
+    const { date } = req.params;
+    // console.log(date);
 
-      // Set start and end of the day for the given date
-      const startOfDay = new Date(date);
-      startOfDay.setUTCHours(0, 0, 0, 0);
+    // Set start and end of the day for the given date
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
-      const endOfDay = new Date(date);
-      endOfDay.setUTCHours(23, 59, 59, 999);
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
-      const openingBalance = await OpeningBalance.findOne({
-          date: { $gte: startOfDay, $lte: endOfDay }
-      });
+    const openingBalance = await OpeningBalance.findOne({
+      date: { $gte: startOfDay, $lte: endOfDay }
+    });
 
-      if (!openingBalance) {
-          return res.status(404).json({ message: 'No opening balance found for this date' });
-      }
+    if (!openingBalance) {
+      // console.log("No Opening Balance");
 
-      res.json(openingBalance);
+      return res.status(201).json({ message: 'No opening balance found for this date' });
+    }
+
+    res.json(openingBalance);
   } catch (error) {
-      res.status(500).json({ message: 'Error fetching opening balance', error });
+    res.status(500).json({ message: 'Error fetching opening balance', error });
   }
 };
 
@@ -157,6 +159,8 @@ export const syncDailyBalanceWithOpeningBalance = async () => {
     openingBalance.accounts.union_bank += dailyChange.accounts.union_bank;
     openingBalance.accounts.tjsb_bank += dailyChange.accounts.tjsb_bank;
 
+    console.log("UPDATED THE OPENING BALANCE");
+    
     // Save the updated opening balance
     await openingBalance.save();
 
@@ -172,7 +176,7 @@ export const getTodayTransactionsWithBalance = async (req, res) => {
   try {
     // Get today's date in 'YYYY-MM-DD' format
     const today = new Date().toISOString().split('T')[0];
-    
+
     // Set start and end of the day
     const startOfDay = new Date(today);
     startOfDay.setUTCHours(0, 0, 0, 0);
@@ -207,7 +211,123 @@ export const getTodayTransactionsWithBalance = async (req, res) => {
         },
       },
     });
+
   } catch (error) {
     res.status(500).json({ message: 'Error fetching today’s transactions and balance changes', error });
+  }
+};
+
+
+
+export const getTransactionsbyID = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // console.log(`Fetching transaction with ID: ${id}`);
+
+    const transaction = await Transaction.findById(id);
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    // console.log(transaction);
+    res.json(transaction);
+  } catch (error) {
+    console.error(error);
+
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
+
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const editTransactionsByID = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Updating transaction with ID: ${id}`);
+
+    // Extract fields from request body
+    const { description, amount, type, category, paid_to, payee, date, bankAccount, bankName, mode } = req.body;
+    console.log(req.body);
+
+    // Fetch the last transaction (for balance calculation)
+    const lastTransaction = await Transaction.findOne().sort({ date: -1 });
+    const previousBalance = lastTransaction ? lastTransaction.balanceAfterTransaction : 0;
+
+    // Calculate new balance after transaction
+    const balanceAfterTransaction = type === 'income'
+      ? previousBalance + amount
+      : previousBalance - amount;
+
+    // Update the transaction
+    const updatedTransaction = await Transaction.findByIdAndUpdate(
+      id,
+      {
+        description,
+        amount,
+        type,
+        category,
+        paid_to: type === 'expense' ? paid_to : undefined,
+        payee: type === 'income' ? payee : undefined,
+        date,
+        bankAccount,
+        bankName,
+        mode,
+        balanceAfterTransaction,
+      },
+      { new: true } // Return the updated document and run validations
+      // , runValidators: true is causing issue while updating 
+    );
+
+    // If the transaction doesn't exist, return a 404 error
+    if (!updatedTransaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    // Respond with the updated transaction
+    res.status(200).json(updatedTransaction);
+
+  } catch (error) {
+    console.error(error);
+
+    // Handle invalid ID format errors
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
+
+    // Handle other errors
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+export const getTransactionsByDate =  async (req, res) => {
+  try {
+    const { date } = req.params; 
+    console.log(date);
+    
+    const parsedDate = new Date(date);
+
+    const transactions = await Transaction.find({
+      date: parsedDate, 
+    });
+
+    const dailyBalanceChanges = await DailyBalanceChange.find({
+      date: date,
+    });
+
+    const openingBalance = await OpeningBalance.findOne({
+      date: parsedDate,
+    });
+
+    // console.log(transactions, dailyBalanceChanges, openingBalance);
+    
+    res.json({ date,transactions, dailyBalanceChanges, openingBalance });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch data', error });
   }
 };

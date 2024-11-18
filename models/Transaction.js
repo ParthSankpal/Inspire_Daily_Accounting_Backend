@@ -30,6 +30,7 @@ const transactionSchema = new mongoose.Schema({
         const expenseCategories = [
           'salaries', 'rent_utilities', 'supplies_materials', 'marketing', 'scholarships', 'event_expenses'
         ];
+        
         return this.type === 'income' 
           ? incomeCategories.includes(value) 
           : expenseCategories.includes(value);
@@ -53,6 +54,11 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['central_bank', 'union_bank', 'tjsb_bank'],
+  },
+  bankAccount: {
+    type: String,
+    required: true,
+    enum: ['CBI123456', 'CBI789012', 'UBI345678','UBI901234', 'TJSB567890','TJSB123456' ],
   },
   mode: {
     type: String,
