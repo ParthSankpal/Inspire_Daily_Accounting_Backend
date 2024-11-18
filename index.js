@@ -28,6 +28,15 @@ app.use(express.json());
 
 app.use(cookieParser());
 
+
+app.get('/', (req, res) => {
+    res.status(200).json({
+        message: "Backend is working correctly!",
+        status: "success",
+        timestamp: new Date().toISOString(),
+    });
+});
+
 app.use('/api/auth', auth);
 
 app.use('/api/finance', finance);
