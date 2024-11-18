@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import auth from './routes/auth.route.js';
 import finance from './routes/finance.routes.js';
+import cors from 'cors';
+
 
 dotenv.config();
 
@@ -22,6 +24,7 @@ const app = express();
 // Middleware setup
 app.use(express.json());
 app.use(cookieParser());
+app.use(cors());  // Allow all origins
 
 // Root endpoint
 app.get('/', (req, res) => {
