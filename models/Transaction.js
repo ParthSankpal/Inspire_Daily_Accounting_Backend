@@ -2,9 +2,9 @@ import mongoose from 'mongoose';
 
 const transactionSchema = new mongoose.Schema({
   date: {
-    type: Date,
+    type: String, // Format 'YYYY-MM-DD'
     required: true,
-    default: Date.now,
+    // default: Date.now,
   },
   description: {
     type: String,
@@ -46,10 +46,10 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     required: function() { return this.type === 'income'; },
   },
-  balanceAfterTransaction: {
-    type: Number,
-    required: true,
-  },
+  // balanceAfterTransaction: {
+  //   type: Number,
+  //   required: true,
+  // },
   bankName: {
     type: String,
     required: true,

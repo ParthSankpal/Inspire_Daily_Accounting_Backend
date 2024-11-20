@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const openingBalanceSchema = new mongoose.Schema({
   date: {
-    type: Date,
+    type: String, // Format 'YYYY-MM-DD'
     required: true,
     unique: true,
   },
