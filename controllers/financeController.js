@@ -2,11 +2,42 @@ import Transaction from '../models/Transaction.js';
 import OpeningBalance from '../models/OpeningBalance.js';
 import DailyBalanceChange from '../models/DailyBalanceChange.js';
 
-const updateDailyOpeningBalanceOnEdit = async (oldTransaction, newTransaction) => {
-  const { amount: oldAmount, type: oldType, mode: oldMode, bankName: oldBankName } = oldTransaction;
-  const { amount: newAmount, type: newType, mode: newMode, bankName: newBankName } = newTransaction;
 
-  // Get the date of the transaction (use today if not specified)
+export const addTransaction = async (req, res) => {
+  try {
+    const { description, amount, type, category, paid_to, payee, date, bankAccount, bankName, mode } = req.body;
+
+    // Create a new transaction
+    const transaction = new Transaction({
+      description,
+      amount,
+      type,
+      category,
+      paid_to: type === 'expense' ? paid_to : undefined,
+      payee: type === 'income' ? payee : undefined,
+      date,
+      bankAccount,
+      bankName,
+      mode,
+    });
+
+    // Save the transaction
+    await transaction.save();
+
+    // Update daily balance
+    await updateDailyBalanceForCreate(transaction);
+
+    res.status(201).json(transaction);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// New function to handle the creation of a transaction
+const updateDailyBalanceForCreate = async (transaction) => {
+  const { amount, type, mode, bankName } = transaction;
+
   const today = new Date().toISOString().split('T')[0];
 
   // Find or initialize today's opening balance
@@ -24,33 +55,18 @@ const updateDailyOpeningBalanceOnEdit = async (oldTransaction, newTransaction) =
     });
   }
 
-  // Reverse the old transaction's effects
-  if (oldType === 'income') {
-    if (oldMode === 'cash') {
-      openingBalance.cash -= oldAmount;
-    } else if (oldMode === 'cheque' || oldMode === 'online_upi') {
-      openingBalance.accounts[oldBankName] -= oldAmount;
-    }
-  } else if (oldType === 'expense') {
-    if (oldMode === 'cash') {
-      openingBalance.cash += oldAmount;
-    } else if (oldMode === 'cheque' || oldMode === 'online_upi') {
-      openingBalance.accounts[oldBankName] += oldAmount;
-    }
-  }
-
   // Apply the new transaction's effects
-  if (newType === 'income') {
-    if (newMode === 'cash') {
-      openingBalance.cash += newAmount;
-    } else if (newMode === 'cheque' || newMode === 'online_upi') {
-      openingBalance.accounts[newBankName] += newAmount;
+  if (type === 'income') {
+    if (mode === 'cash') {
+      openingBalance.cash += amount;
+    } else if (mode === 'cheque' || mode === 'online_upi') {
+      openingBalance.accounts[bankName] += amount;
     }
-  } else if (newType === 'expense') {
-    if (newMode === 'cash') {
-      openingBalance.cash -= newAmount;
-    } else if (newMode === 'cheque' || newMode === 'online_upi') {
-      openingBalance.accounts[newBankName] -= newAmount;
+  } else if (type === 'expense') {
+    if (mode === 'cash') {
+      openingBalance.cash -= amount;
+    } else if (mode === 'cheque' || mode === 'online_upi') {
+      openingBalance.accounts[bankName] -= amount;
     }
   }
 
@@ -58,46 +74,6 @@ const updateDailyOpeningBalanceOnEdit = async (oldTransaction, newTransaction) =
   await openingBalance.save();
 };
 
-
-
-export const addTransaction = async (req, res) => {
-  try {
-    const { description, amount, type, category, paid_to, payee, date, bankAccount, bankName, mode } = req.body;
-    console.log(req.body);
-
-    // const lastTransaction = await Transaction.findOne().sort({ date: -1 });
-    // const previousBalance = lastTransaction ? lastTransaction.balanceAfterTransaction : 0;
-    // const balanceAfterTransaction = type === 'income'
-    //   ? previousBalance + amount
-    //   : previousBalance - amount;
-
-    const transaction = new Transaction({
-      description,
-      amount,
-      type,
-      category,
-      paid_to: type === 'expense' ? paid_to : undefined,
-      payee: type === 'income' ? payee : undefined,
-      date,
-      bankAccount,
-      bankName,
-      mode,
-      // balanceAfterTransaction,
-    });
-
-    await transaction.save();
-    console.log(transaction);
-
-    // Update daily balance changes
-    await updatedailyOpeningBalance(transaction);
-
-    res.status(201).json(transaction);
-
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: error.message });
-  }
-};
 
 export const setOpeningBalance = async (req, res) => {
   try {
@@ -422,6 +398,67 @@ export const editTransactionsByID = async (req, res) => {
 };
 
 
+const updateDailyOpeningBalanceOnEdit = async (oldTransaction, newTransaction) => {
+  console.log("Old Transaction:", oldTransaction);
+  console.log("New Transaction:", newTransaction);
+
+  // Destructure old and new transaction details
+  const { amount: oldAmount, type: oldType, mode: oldMode, bankName: oldBankName } = oldTransaction || {};
+  const { amount: newAmount, type: newType, mode: newMode, bankName: newBankName } = newTransaction;
+
+  // Get today's date (or fallback if not specified)
+  const today = new Date().toISOString().split('T')[0];
+
+  // Find or initialize today's opening balance
+  let openingBalance = await DailyBalanceChange.findOne({ date: today });
+
+  if (!openingBalance) {
+    openingBalance = new DailyBalanceChange({
+      date: today,
+      cash: 0,
+      accounts: {
+        central_bank: 0,
+        union_bank: 0,
+        tjsb_bank: 0,
+      },
+    });
+  }
+
+  // Reverse the old transaction's effects (if there was an old transaction)
+  if (oldTransaction) {
+    if (oldType === 'income') {
+      if (oldMode === 'cash') {
+        openingBalance.cash -= oldAmount;
+      } else if (oldMode === 'cheque' || oldMode === 'online_upi') {
+        openingBalance.accounts[oldBankName] -= oldAmount;
+      }
+    } else if (oldType === 'expense') {
+      if (oldMode === 'cash') {
+        openingBalance.cash += oldAmount;
+      } else if (oldMode === 'cheque' || oldMode === 'online_upi') {
+        openingBalance.accounts[oldBankName] += oldAmount;
+      }
+    }
+  }
+
+  // Apply the new transaction's effects
+  if (newType === 'income') {
+    if (newMode === 'cash') {
+      openingBalance.cash += newAmount;
+    } else if (newMode === 'cheque' || newMode === 'online_upi') {
+      openingBalance.accounts[newBankName] += newAmount;
+    }
+  } else if (newType === 'expense') {
+    if (newMode === 'cash') {
+      openingBalance.cash -= newAmount;
+    } else if (newMode === 'cheque' || newMode === 'online_upi') {
+      openingBalance.accounts[newBankName] -= newAmount;
+    }
+  }
+
+  // Save the updated opening balance
+  await openingBalance.save();
+};
 
 
 export const getTransactionsByDate = async (req, res) => {
