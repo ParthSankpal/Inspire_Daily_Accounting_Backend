@@ -258,8 +258,8 @@ export const syncDailyBalanceWithOpeningBalance = async () => {
 
     // Save the updated opening balance
     await openingBalance.save();
-
     console.log("Tomorrow's opening balance has been successfully synced.");
+    return openingBalance;
   } catch (error) {
     console.error("Error syncing daily balance with opening balance:", error);
   }
